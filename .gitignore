@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Data
+data/
+*.json
+!config.example.yaml
+
+# Env
+.env
+
+# SA keys (aldrig i git)
+*.json
+!package.json
+!package-lock.json
+!tailwind.config.js
+!vite.config.js
+!postcss.config.js
