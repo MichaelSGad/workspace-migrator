@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
-import { ChevronLeft, Mail, HardDrive, Calendar, Users, ChevronDown, ChevronUp, MoveRight, Loader, CheckCircle2, XCircle, Clock, ShieldCheck, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, Mail, HardDrive, Calendar, Users, ChevronDown, ChevronUp, MoveRight, Loader, CheckCircle2, XCircle, Clock, ShieldCheck, AlertTriangle, RotateCcw } from 'lucide-react'
 
 const SERVICE_ICONS = { gmail: Mail, drive: HardDrive, calendar: Calendar, contacts: Users }
 const SERVICE_LABELS = { gmail: 'Gmail', drive: 'Drive', calendar: 'Kalender', contacts: 'Kontakter' }
@@ -196,8 +196,21 @@ export default function JobProgress() {
   const [job, setJob] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showConfetti, setShowConfetti] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const wasRunning = useRef(false)
   const esRef = useRef(null)
+
+  async function retryJob() {
+    if (!job) return
+    setRetrying(true)
+    try {
+      const newJob = await api.createJob(job.project_id, job.services)
+      navigate(`/jobs/${newJob.id}`)
+    } catch (err) {
+      alert(err.message)
+      setRetrying(false)
+    }
+  }
 
   useEffect(() => {
     api.getJob(id).then(j => { setJob(j); setLoading(false) }).catch(() => setLoading(false))
@@ -256,7 +269,7 @@ export default function JobProgress() {
 
       <header className="border-b border-indigo-500/20 bg-navy-900/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4 flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="btn-ghost text-sm flex items-center gap-2">
+          <button onClick={() => job ? navigate(`/projects/${job.project_id}`) : navigate('/')} className="btn-ghost text-sm flex items-center gap-2">
             <ChevronLeft className="w-4 h-4" /> Tilbage
           </button>
           <div className="w-px h-4 bg-slate-700" />
@@ -312,6 +325,16 @@ export default function JobProgress() {
           <div className="mt-4 flex justify-center">
             <button onClick={() => api.stopJob(id)} className="btn-ghost text-red-400 hover:text-red-300 text-sm">
               Stop migration
+            </button>
+          </div>
+        )}
+
+        {(overallStatus === 'failed' || overallStatus === 'cancelled') && (
+          <div className="mt-4 flex justify-center">
+            <button onClick={retryJob} disabled={retrying} className="btn-primary flex items-center gap-2">
+              {retrying
+                ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Starter…</>
+                : <><RotateCcw className="w-4 h-4" /> Prøv igen</>}
             </button>
           </div>
         )}
