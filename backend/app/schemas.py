@@ -45,6 +45,15 @@ class ProjectUserOut(BaseModel):
         from_attributes = True
 
 
+class JobBasicOut(BaseModel):
+    id: str
+    status: JobStatus
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class ProjectOut(BaseModel):
     id: int
     name: str
@@ -52,6 +61,7 @@ class ProjectOut(BaseModel):
     target_domain: str
     created_at: datetime
     user_pairs: list[ProjectUserOut] = []
+    jobs: list[JobBasicOut] = []
 
     class Config:
         from_attributes = True

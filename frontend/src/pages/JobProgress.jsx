@@ -5,6 +5,7 @@ import { ChevronLeft, Mail, HardDrive, Calendar, Users, ChevronDown, ChevronUp, 
 
 const SERVICE_ICONS = { gmail: Mail, drive: HardDrive, calendar: Calendar, contacts: Users }
 const SERVICE_LABELS = { gmail: 'Gmail', drive: 'Drive', calendar: 'Kalender', contacts: 'Kontakter' }
+const STATUS_LABELS = { running: 'Kører', done: 'Færdig', failed: 'Fejlet', pending: 'Afventer', cancelled: 'Annulleret' }
 
 const STATUS_BADGE = {
   running: <span className="badge-running"><span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />Kører</span>,
