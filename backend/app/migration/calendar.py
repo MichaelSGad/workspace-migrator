@@ -53,7 +53,8 @@ class CalendarMigrator(BaseMigrator):
     def _insert_event(self, cal_id, event_body):
         clean = {k: v for k, v in event_body.items()
                  if k not in ("id", "etag", "htmlLink", "created", "updated", "creator", "organizer")}
-        return self.dst.events().insert(calendarId=cal_id, body=clean).execute()
+        # sendUpdates='none' prevents Google from emailing invites to attendees
+        return self.dst.events().insert(calendarId=cal_id, body=clean, sendUpdates='none').execute()
 
     def _migrate_calendar(self, src_cal_id, dst_cal_id, counters):
         page_token = None
