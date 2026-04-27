@@ -181,7 +181,7 @@ export default function NewProject() {
               <h2 className="font-display text-2xl font-bold text-white mb-2">Projektnavn</h2>
               <p className="text-slate-400 mb-6">Giv projektet et navn der beskriver hvad der migreres.</p>
               <label className="label">Projektnavn</label>
-              <input className="input text-lg" placeholder="fx Vindrose migration 2025" value={name}
+              <input className="input text-lg" placeholder="fx Acme Corp migration 2025" value={name}
                 onChange={e => setName(e.target.value)} autoFocus onKeyDown={e => e.key === 'Enter' && canProceed() && setStep(1)} />
             </div>
           )}
