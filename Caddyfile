@@ -1,3 +1,5 @@
-{$DOMAIN} {
+# For HTTP-only (IP or no domain): http://your-ip { reverse_proxy nginx:80 }
+# For HTTPS (with domain): your-domain.com { reverse_proxy nginx:80 }
+http://{$DOMAIN} {
     reverse_proxy nginx:80
 }
