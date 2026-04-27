@@ -1,4 +1,7 @@
+import base64
+import email as email_lib
 import time
+import threading
 from typing import Iterator
 
 from googleapiclient.errors import HttpError
@@ -32,10 +35,22 @@ retry_api = retry(
 )
 
 
+def _extract_message_id(raw_b64: str) -> str:
+    try:
+        raw_bytes = base64.urlsafe_b64decode(raw_b64 + "==")
+        msg = email_lib.message_from_bytes(raw_bytes)
+        return (msg.get("Message-ID") or "").strip()
+    except Exception:
+        return ""
+
+
 class GmailMigrator(BaseMigrator):
     def __init__(self, source_user, target_user, source_sa, target_sa, progress_dir,
-                 on_progress: ProgressCallback | None = None, skip_spam=True, skip_trash=True):
-        super().__init__(source_user, target_user, source_sa, target_sa, progress_dir, on_progress)
+                 on_progress: ProgressCallback | None = None,
+                 stop_event: threading.Event | None = None,
+                 skip_spam=True, skip_trash=True):
+        super().__init__(source_user, target_user, source_sa, target_sa, progress_dir,
+                         on_progress, stop_event)
         self.skip_spam = skip_spam
         self.skip_trash = skip_trash
         progress_path = f"{progress_dir}/gmail_{source_user}.json"
@@ -121,6 +136,17 @@ class GmailMigrator(BaseMigrator):
             .execute()
         )
 
+    @retry_api
+    def _find_by_message_id(self, message_id: str) -> str | None:
+        """Return target message ID if a message with this RFC2822 Message-ID already exists."""
+        if not message_id:
+            return None
+        results = self.dst.users().messages().list(
+            userId="me", q=f"rfc822msgid:{message_id}", maxResults=1
+        ).execute()
+        msgs = results.get("messages", [])
+        return msgs[0]["id"] if msgs else None
+
     def _map_labels(self, src_label_ids, label_map):
         out = []
         for lid in src_label_ids:
@@ -134,11 +160,28 @@ class GmailMigrator(BaseMigrator):
         label_map = self.sync_labels()
         total = migrated = skipped = failed = 0
 
+        # Resolve any items that were pending when we last crashed.
+        # We search the target by Message-ID to avoid creating duplicates.
+        pending = self.progress.pending_items()
+        if pending:
+            self._report(0, 0, 0, 0, f"Tjekker {len(pending)} afbrudte emails for dubletter…")
+            for msg_id, meta in pending.items():
+                message_id_header = meta.get("message_id_header", "")
+                existing = self._find_by_message_id(message_id_header) if message_id_header else None
+                if existing:
+                    self.progress.mark_done(msg_id, {"target_id": existing, "recovered": True})
+                else:
+                    # Not found on target — clear pending so it will be re-inserted
+                    self.progress.mark_failed(msg_id, "Afbrudt tidligere — prøver igen")
+
         for msg_id in self._iter_message_ids():
+            if self._should_stop():
+                self._report(total, migrated, skipped, failed, "Migration stoppet af bruger")
+                break
+
             total += 1
             if self.progress.is_done(msg_id):
                 skipped += 1
-                self._report(total, migrated, skipped, failed, "")
                 continue
 
             try:
@@ -147,9 +190,18 @@ class GmailMigrator(BaseMigrator):
                 if not raw:
                     raise RetryableError("ingen raw payload")
 
+                message_id_header = _extract_message_id(raw)
                 target_labels = self._map_labels(full.get("labelIds", []), label_map)
+
+                # Mark pending BEFORE writing to target — if we crash here,
+                # the next run will search by Message-ID and recover without creating a duplicate.
+                self.progress.mark_pending(msg_id, {"message_id_header": message_id_header})
+
                 result = self._insert_message(raw, target_labels)
-                self.progress.mark_done(msg_id, {"target_id": result.get("id")})
+                self.progress.mark_done(msg_id, {
+                    "target_id": result.get("id"),
+                    "message_id_header": message_id_header,
+                })
                 migrated += 1
 
                 if migrated % 25 == 0:
@@ -165,5 +217,34 @@ class GmailMigrator(BaseMigrator):
                 self.progress.mark_failed(msg_id, str(e))
                 self._report(total, migrated, skipped, failed, f"Fejl: {e}")
 
-        self._report(total, migrated, skipped, failed, f"Færdig. {migrated} migreret, {failed} fejlede")
+        self._report(total, migrated, skipped, failed,
+                     f"Gmail færdig. {migrated} migreret, {skipped} sprunget over, {failed} fejlede")
         return {"total": total, "migrated": migrated, "skipped": skipped, "failed": failed}
+
+    def verify(self) -> dict:
+        q = self._build_query()
+
+        def _count(svc):
+            total = 0
+            token = None
+            while True:
+                r = svc.users().messages().list(
+                    userId="me", q=q, pageToken=token, maxResults=500
+                ).execute()
+                total += len(r.get("messages", []))
+                token = r.get("nextPageToken")
+                if not token:
+                    break
+            return total
+
+        src_count = _count(self.src)
+        dst_count = _count(self.dst)
+        diff = src_count - dst_count
+        status = "ok" if diff == 0 else ("mangler" if diff > 0 else "overskud")
+        return {
+            "service": "gmail",
+            "source_count": src_count,
+            "target_count": dst_count,
+            "diff": diff,
+            "status": status,
+        }

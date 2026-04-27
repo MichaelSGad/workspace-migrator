@@ -1,3 +1,4 @@
+import threading
 import time
 
 from googleapiclient.errors import HttpError
@@ -22,8 +23,10 @@ retry_api = retry(
 
 class ContactsMigrator(BaseMigrator):
     def __init__(self, source_user, target_user, source_sa, target_sa, progress_dir,
-                 on_progress: ProgressCallback | None = None):
-        super().__init__(source_user, target_user, source_sa, target_sa, progress_dir, on_progress)
+                 on_progress: ProgressCallback | None = None,
+                 stop_event: threading.Event | None = None):
+        super().__init__(source_user, target_user, source_sa, target_sa, progress_dir,
+                         on_progress, stop_event)
         progress_path = f"{progress_dir}/contacts_{source_user}.json"
         self.progress = Progress(progress_path)
         self.src = build_service("people", "v1", source_sa, source_user, CONTACTS_SOURCE_SCOPES)
@@ -51,10 +54,17 @@ class ContactsMigrator(BaseMigrator):
         page_token = None
 
         while True:
+            if self._should_stop():
+                self._report(total, migrated, skipped, failed, "Migration stoppet af bruger")
+                break
+
             resp = self._list_contacts(page_token)
             contacts = resp.get("connections", [])
 
             for person in contacts:
+                if self._should_stop():
+                    break
+
                 total += 1
                 resource_name = person.get("resourceName", "")
 
@@ -64,6 +74,7 @@ class ContactsMigrator(BaseMigrator):
 
                 try:
                     body = self._clean_person(person)
+                    self.progress.mark_pending(resource_name)
                     self._create_contact(body)
                     self.progress.mark_done(resource_name)
                     migrated += 1
@@ -86,3 +97,32 @@ class ContactsMigrator(BaseMigrator):
         self._report(total, migrated, skipped, failed,
                      f"Kontakter færdig. {migrated} migreret, {failed} fejlede")
         return {"total": total, "migrated": migrated, "skipped": skipped, "failed": failed}
+
+    def verify(self) -> dict:
+        def _count(svc):
+            total = 0
+            token = None
+            while True:
+                r = svc.people().connections().list(
+                    resourceName="people/me",
+                    pageToken=token,
+                    pageSize=1000,
+                    personFields="names",
+                ).execute()
+                total += len(r.get("connections", []))
+                token = r.get("nextPageToken")
+                if not token:
+                    break
+            return total
+
+        src_count = _count(self.src)
+        dst_count = _count(self.dst)
+        diff = src_count - dst_count
+        status = "ok" if diff == 0 else ("mangler" if diff > 0 else "overskud")
+        return {
+            "service": "contacts",
+            "source_count": src_count,
+            "target_count": dst_count,
+            "diff": diff,
+            "status": status,
+        }

@@ -1,13 +1,27 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..api.auth import get_current_user
+from ..config import settings
 from ..database import get_db, SessionLocal
 from ..models import MigrationJob, JobStatus, Project, User
 from ..schemas import JobOut, StartJobRequest
-from ..services.job_runner import start_job
+from ..services.job_runner import start_job, cancel_job
+from ..migration.gmail import GmailMigrator
+from ..migration.drive import DriveMigrator
+from ..migration.calendar import CalendarMigrator
+from ..migration.contacts import ContactsMigrator
 
 router = APIRouter(tags=["jobs"])
+
+MIGRATOR_MAP = {
+    "gmail": GmailMigrator,
+    "drive": DriveMigrator,
+    "calendar": CalendarMigrator,
+    "contacts": ContactsMigrator,
+}
 
 
 def _db_factory():
@@ -69,6 +83,64 @@ def stop_job(
     if not job or job.project.owner_id != current_user.id:
         raise HTTPException(status_code=404, detail="Job ikke fundet")
     if job.status == JobStatus.running:
+        cancel_job(job_id)  # signals all threads to stop gracefully
         job.status = JobStatus.cancelled
         db.commit()
     return {"status": "stop anmodet"}
+
+
+@router.post("/api/jobs/{job_id}/verify")
+def verify_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Run a count comparison (source vs target) for each service in the job.
+    Runs in parallel across services. May take a minute for large mailboxes."""
+    job = db.get(MigrationJob, job_id)
+    if not job or job.project.owner_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Job ikke fundet")
+    if job.status == JobStatus.running:
+        raise HTTPException(status_code=400, detail="Job kører stadig — vent til det er færdigt")
+
+    project = job.project
+
+    def _run_verify(user_pair, service):
+        migrator_cls = MIGRATOR_MAP.get(service)
+        if not migrator_cls:
+            return None
+        migrator = migrator_cls(
+            source_user=user_pair.source_email,
+            target_user=user_pair.target_email,
+            source_sa=project.source_sa_path,
+            target_sa=project.target_sa_path,
+            progress_dir=settings.progress_dir,
+        )
+        result = migrator.verify()
+        result["source_user"] = user_pair.source_email
+        result["target_user"] = user_pair.target_email
+        return result
+
+    results = []
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {
+            pool.submit(_run_verify, pair, service): (pair.source_email, service)
+            for pair in project.user_pairs
+            for service in job.services
+        }
+        for future in as_completed(futures):
+            try:
+                r = future.result()
+                if r:
+                    results.append(r)
+            except Exception as e:
+                src, svc = futures[future]
+                results.append({
+                    "source_user": src,
+                    "service": svc,
+                    "error": str(e),
+                    "status": "fejl",
+                })
+
+    overall_ok = all(r.get("status") == "ok" for r in results if "error" not in r)
+    return {"ok": overall_ok, "results": results}

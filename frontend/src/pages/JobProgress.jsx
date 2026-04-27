@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
-import { ChevronLeft, Mail, HardDrive, Calendar, Users, ChevronDown, ChevronUp, MoveRight, Loader, CheckCircle2, XCircle, Clock } from 'lucide-react'
+import { ChevronLeft, Mail, HardDrive, Calendar, Users, ChevronDown, ChevronUp, MoveRight, Loader, CheckCircle2, XCircle, Clock, ShieldCheck, AlertTriangle } from 'lucide-react'
 
 const SERVICE_ICONS = { gmail: Mail, drive: HardDrive, calendar: Calendar, contacts: Users }
 const SERVICE_LABELS = { gmail: 'Gmail', drive: 'Drive', calendar: 'Kalender', contacts: 'Kontakter' }
@@ -116,6 +116,76 @@ function ProgressCard({ item }) {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function VerifyPanel({ jobId }) {
+  const [state, setState] = useState('idle') // idle | loading | done | error
+  const [results, setResults] = useState(null)
+
+  async function runVerify() {
+    setState('loading')
+    try {
+      const data = await api.verifyJob(jobId)
+      setResults(data)
+      setState('done')
+    } catch (err) {
+      setState('error')
+    }
+  }
+
+  if (state === 'idle') return (
+    <div className="mt-4 flex justify-center">
+      <button onClick={runVerify} className="btn-secondary flex items-center gap-2 text-sm">
+        <ShieldCheck className="w-4 h-4 text-indigo-400" /> Verificer migration
+      </button>
+    </div>
+  )
+
+  if (state === 'loading') return (
+    <div className="mt-4 flex justify-center items-center gap-2 text-slate-400 text-sm">
+      <Loader className="w-4 h-4 animate-spin" /> Tæller elementer på kilde og mål…
+    </div>
+  )
+
+  if (state === 'error') return (
+    <div className="mt-4 card p-4 flex items-center gap-2 text-red-400 text-sm">
+      <XCircle className="w-4 h-4" /> Verificering fejlede — tjek service account tilladelser
+    </div>
+  )
+
+  return (
+    <div className="mt-4 card p-5">
+      <div className="flex items-center gap-2 mb-4">
+        {results.ok
+          ? <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+          : <AlertTriangle className="w-5 h-5 text-amber-400" />}
+        <span className="font-semibold text-white text-sm">
+          {results.ok ? 'Alt er overført korrekt' : 'Afvigelser fundet — tjek detaljer'}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {results.results.map((r, i) => (
+          <div key={i} className="flex items-center justify-between text-sm py-2 border-b border-slate-800 last:border-0">
+            <div className="flex items-center gap-2 text-slate-300">
+              <span className="font-mono text-xs text-slate-500">{r.source_user}</span>
+              <span className="text-slate-600">·</span>
+              <span>{SERVICE_LABELS[r.service] || r.service}</span>
+            </div>
+            {r.error ? (
+              <span className="text-red-400 text-xs">Fejl</span>
+            ) : (
+              <div className="flex items-center gap-3 font-mono text-xs">
+                <span className="text-slate-400">{r.source_count} → {r.target_count}</span>
+                {r.diff === 0
+                  ? <span className="text-emerald-400">✓</span>
+                  : <span className="text-amber-400">{r.diff > 0 ? `−${r.diff} mangler` : `+${Math.abs(r.diff)} ekstra`}</span>}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -244,6 +314,10 @@ export default function JobProgress() {
               Stop migration
             </button>
           </div>
+        )}
+
+        {(overallStatus === 'done' || overallStatus === 'failed') && (
+          <VerifyPanel jobId={id} />
         )}
       </div>
     </div>

@@ -9,11 +9,12 @@ class Progress:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = Lock()
-        self._data = {"done": {}, "failed": {}, "label_map": {}, "stats": {}}
+        self._data = {"done": {}, "pending": {}, "failed": {}, "label_map": {}, "stats": {}}
         if self.path.exists():
             try:
-                self._data = json.loads(self.path.read_text())
-                for key in ("done", "failed", "label_map", "stats"):
+                loaded = json.loads(self.path.read_text())
+                self._data = loaded
+                for key in ("done", "pending", "failed", "label_map", "stats"):
                     self._data.setdefault(key, {})
             except json.JSONDecodeError:
                 pass
@@ -21,15 +22,29 @@ class Progress:
     def is_done(self, item_id: str) -> bool:
         return item_id in self._data["done"]
 
+    def is_pending(self, item_id: str) -> bool:
+        return item_id in self._data["pending"]
+
+    def pending_items(self) -> dict:
+        return dict(self._data["pending"])
+
+    # Called before writing to target — if we crash here, item is retried on resume
+    def mark_pending(self, item_id: str, meta: dict | None = None):
+        with self._lock:
+            self._data["pending"][item_id] = meta or {}
+            self._flush()
+
     def mark_done(self, item_id: str, meta: dict | None = None):
         with self._lock:
             self._data["done"][item_id] = meta or True
+            self._data["pending"].pop(item_id, None)
             self._data["failed"].pop(item_id, None)
             self._flush()
 
     def mark_failed(self, item_id: str, error: str):
         with self._lock:
             self._data["failed"][item_id] = error
+            self._data["pending"].pop(item_id, None)
             self._flush()
 
     def set_label_map(self, mapping: dict):
@@ -50,6 +65,9 @@ class Progress:
 
     def failed_count(self) -> int:
         return len(self._data["failed"])
+
+    def pending_count(self) -> int:
+        return len(self._data["pending"])
 
     def failed_items(self) -> dict:
         return dict(self._data["failed"])

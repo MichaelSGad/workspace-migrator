@@ -56,6 +56,7 @@ export const api = {
   getJobs: (projectId) => request('GET', `/api/projects/${projectId}/jobs`),
   getJob: (id) => request('GET', `/api/jobs/${id}`),
   stopJob: (id) => request('POST', `/api/jobs/${id}/stop`),
+  verifyJob: (id) => request('POST', `/api/jobs/${id}/verify`),
 
   streamJob: (id) => {
     const token = getToken()
