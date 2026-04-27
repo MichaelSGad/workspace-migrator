@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import {
   ChevronRight, ChevronLeft, Upload, X, Plus, Mail, HardDrive,
-  Calendar, Users, Check, AlertCircle, FileText, Layers
+  Calendar, Users, Check, AlertCircle, FileText, Layers, HelpCircle, ChevronDown, ChevronUp
 } from 'lucide-react'
 
 const STEPS = ['Navn', 'Kilde', 'Mål', 'Brugere', 'Services']
@@ -14,6 +14,91 @@ const SERVICES = [
   { id: 'calendar', label: 'Kalender', icon: Calendar, desc: 'Begivenheder og tilbagevendende aftaler' },
   { id: 'contacts', label: 'Kontakter', icon: Users, desc: 'Alle kontakter med alle felter' },
 ]
+
+const HOW_TO = {
+  0: {
+    title: 'Om projektnavn',
+    steps: [
+      'Giv projektet et beskrivende navn, fx virksomhedens navn og årstal.',
+      'Navnet bruges kun internt til at identificere migrationen i oversigten.',
+    ],
+  },
+  1: {
+    title: 'Sådan opretter du en service account til kilden',
+    steps: [
+      'Gå til Google Cloud Console (console.cloud.google.com) og vælg eller opret et projekt.',
+      'Gå til IAM & Admin → Service Accounts → Opret service account. Giv den et navn og klik Færdig.',
+      'Klik på service accounten → Keys → Add Key → Create new key → JSON. Gem filen — det er den du uploader her.',
+      'Gå til Google Workspace Admin Console → Sikkerhed → API-kontrol → Domain-wide delegation.',
+      'Klik "Tilføj ny" og indsæt service accountens Client ID (ses på service account-siden under "Unique ID").',
+      'Tilføj disse scopes: gmail.readonly, drive.readonly, calendar.readonly, contacts.readonly — og klik Godkend.',
+    ],
+  },
+  2: {
+    title: 'Sådan opretter du en service account til målet',
+    steps: [
+      'Gentag samme procedure i Google Cloud Console for måldomænets Google-projekt.',
+      'Opret en ny service account og download JSON-nøglen.',
+      'Gå til Google Workspace Admin Console for måldomænet → Sikkerhed → API-kontrol → Domain-wide delegation.',
+      'Tilføj service accountens Client ID med disse scopes: gmail.insert, gmail.labels, gmail.modify, drive (fuld), calendar, contacts.',
+      'Klik Godkend. Det kan tage op til 15 minutter før delegationen træder i kraft.',
+    ],
+  },
+  3: {
+    title: 'Sådan tilføjer du brugere',
+    steps: [
+      'Skriv kilde-emailadressen (den gamle konto) i venstre kolonne og mål-emailadressen (den nye konto) i højre.',
+      'Klik "Tilføj bruger" for at tilføje flere rækker — én per bruger der skal migreres.',
+      'Har du mange brugere, kan du importere en CSV-fil med formatet: kilde@gammelt.dk,mål@nyt.dk (én per linje).',
+      'Kun brugere med gyldige emailadresser i begge felter medtages i migrationen.',
+    ],
+  },
+  4: {
+    title: 'Sådan vælger du services',
+    steps: [
+      'Vælg de datatyper der skal overføres — du kan vælge én eller alle fire.',
+      'Gmail: Alle emails med labels og vedhæftede filer overføres og bevarer original-dato.',
+      'Drive: Filer og mapper kopieres inkl. Google Docs/Sheets/Slides (konverteres ikke).',
+      'Migrationen er genoptagelig — kører du den igen overføres kun data der ikke allerede er migreret.',
+    ],
+  },
+}
+
+function HowTo({ step }) {
+  const [open, setOpen] = useState(false)
+  const info = HOW_TO[step]
+  if (!info) return null
+  return (
+    <div className="mt-6 rounded-xl border border-indigo-500/20 bg-indigo-500/5 overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-indigo-500/10 transition-colors"
+      >
+        <div className="flex items-center gap-2 text-indigo-300 text-sm font-medium">
+          <HelpCircle className="w-4 h-4 flex-shrink-0" />
+          {info.title}
+        </div>
+        {open
+          ? <ChevronUp className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+          : <ChevronDown className="w-4 h-4 text-indigo-400 flex-shrink-0" />}
+      </button>
+      {open && (
+        <div className="px-4 pb-4">
+          <ol className="space-y-2">
+            {info.steps.map((s, i) => (
+              <li key={i} className="flex gap-3 text-sm text-slate-300">
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-indigo-600/40 text-indigo-300 text-xs flex items-center justify-center font-semibold mt-0.5">
+                  {i + 1}
+                </span>
+                {s}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function FileDropZone({ label, file, onFile }) {
   const [dragging, setDragging] = useState(false)
@@ -183,6 +268,7 @@ export default function NewProject() {
               <label className="label">Projektnavn</label>
               <input className="input text-lg" placeholder="fx Acme Corp migration 2025" value={name}
                 onChange={e => setName(e.target.value)} autoFocus onKeyDown={e => e.key === 'Enter' && canProceed() && setStep(1)} />
+              <HowTo step={0} />
             </div>
           )}
 
@@ -201,6 +287,7 @@ export default function NewProject() {
                   <FileDropZone label="Upload source-sa-key.json" file={sourceSA} onFile={setSourceSA} />
                 </div>
               </div>
+              <HowTo step={1} />
             </div>
           )}
 
@@ -219,6 +306,7 @@ export default function NewProject() {
                   <FileDropZone label="Upload target-sa-key.json" file={targetSA} onFile={setTargetSA} />
                 </div>
               </div>
+              <HowTo step={2} />
             </div>
           )}
 
@@ -257,6 +345,7 @@ export default function NewProject() {
                 </button>
                 <input ref={csvRef} type="file" accept=".csv,.txt" className="hidden" onChange={importCSV} />
               </div>
+              <HowTo step={3} />
             </div>
           )}
 
@@ -317,6 +406,8 @@ export default function NewProject() {
                   {error}
                 </div>
               )}
+
+              <HowTo step={4} />
             </div>
           )}
         </div>
