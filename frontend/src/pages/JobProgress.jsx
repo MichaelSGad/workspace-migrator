@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
-import { ChevronLeft, Mail, HardDrive, Calendar, Users, ChevronDown, ChevronUp, MoveRight, Loader, CheckCircle2, XCircle, Clock, ShieldCheck, AlertTriangle, RotateCcw } from 'lucide-react'
+import { ChevronLeft, Mail, HardDrive, Calendar, Users, ChevronDown, ChevronUp, MoveRight, Loader, CheckCircle2, XCircle, Clock, ShieldCheck, AlertTriangle, RotateCcw, HelpCircle } from 'lucide-react'
 
 const SERVICE_ICONS = { gmail: Mail, drive: HardDrive, calendar: Calendar, contacts: Users }
 const SERVICE_LABELS = { gmail: 'Gmail', drive: 'Drive', calendar: 'Kalender', contacts: 'Kontakter' }
@@ -41,10 +41,30 @@ function Confetti() {
   )
 }
 
-function ProgressCard({ item }) {
+function ProgressCard({ item, onRetry }) {
   const [expanded, setExpanded] = useState(false)
+  const [diagnosing, setDiagnosing] = useState(false)
+  const [diagnosis, setDiagnosis] = useState(null)
   const Icon = SERVICE_ICONS[item.service] || Mail
   const pct = item.total > 0 ? Math.round((item.migrated / item.total) * 100) : 0
+  const isFailed = item.status === 'failed' || item.status === 'cancelled'
+
+  async function diagnose() {
+    setDiagnosing(true)
+    try {
+      const result = await api.diagnoseLog({
+        log: item.log_tail,
+        service: item.service,
+        source_email: item.source_email,
+        target_email: item.target_email,
+      })
+      setDiagnosis(result)
+    } catch {
+      setDiagnosis({ title: 'Analyse mislykkedes', explanation: 'Tjek fejlloggen manuelt nedenfor.', fix: '' })
+    } finally {
+      setDiagnosing(false)
+    }
+  }
 
   return (
     <div className={`card p-5 transition-all duration-300 ${item.status === 'running' ? 'border-indigo-500/40 shadow-[0_0_16px_rgba(99,102,241,0.1)]' : ''}`}>
@@ -99,6 +119,20 @@ function ProgressCard({ item }) {
         ))}
       </div>
 
+      {/* AI diagnosis */}
+      {diagnosis && (
+        <div className="mb-3 rounded-lg bg-amber-950/30 border border-amber-500/20 p-3">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+            <span className="text-xs font-semibold text-amber-300">{diagnosis.title}</span>
+          </div>
+          <p className="text-xs text-slate-300 leading-relaxed mb-1.5">{diagnosis.explanation}</p>
+          {diagnosis.fix && (
+            <p className="text-xs text-slate-400"><span className="text-indigo-400 font-medium">Løsning: </span>{diagnosis.fix}</p>
+          )}
+        </div>
+      )}
+
       {/* Log */}
       {item.log_tail && (
         <div>
@@ -113,6 +147,26 @@ function ProgressCard({ item }) {
                 <div key={i} className="py-0.5 border-b border-slate-800/50 last:border-0">{line}</div>
               ))}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Failed actions */}
+      {isFailed && (
+        <div className="mt-3 pt-3 border-t border-slate-800/60 flex items-center gap-2 flex-wrap">
+          {onRetry && (
+            <button onClick={() => onRetry(item.service)}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors px-2 py-1 rounded-md hover:bg-white/5">
+              <RotateCcw className="w-3 h-3" /> Prøv igen
+            </button>
+          )}
+          {item.log_tail && !diagnosis && (
+            <button onClick={diagnose} disabled={diagnosing}
+              className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors px-2 py-1 rounded-md hover:bg-indigo-500/10 disabled:opacity-50">
+              {diagnosing
+                ? <><Loader className="w-3 h-3 animate-spin" /> Analyserer…</>
+                : <><HelpCircle className="w-3 h-3" /> Forklar fejlen</>}
+            </button>
           )}
         </div>
       )}
@@ -209,6 +263,16 @@ export default function JobProgress() {
     } catch (err) {
       alert(err.message)
       setRetrying(false)
+    }
+  }
+
+  async function retryService(service) {
+    if (!job) return
+    try {
+      const newJob = await api.createJob(job.project_id, [service])
+      navigate(`/jobs/${newJob.id}`)
+    } catch (err) {
+      alert(err.message)
     }
   }
 
@@ -310,7 +374,13 @@ export default function JobProgress() {
               {userEmail}
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {items.map(item => <ProgressCard key={item.id} item={item} />)}
+              {items.map(item => (
+                <ProgressCard
+                  key={item.id}
+                  item={item}
+                  onRetry={['failed', 'cancelled'].includes(overallStatus) ? retryService : null}
+                />
+              ))}
             </div>
           </div>
         ))}
@@ -331,10 +401,10 @@ export default function JobProgress() {
 
         {(overallStatus === 'failed' || overallStatus === 'cancelled') && (
           <div className="mt-4 flex justify-center">
-            <button onClick={retryJob} disabled={retrying} className="btn-primary flex items-center gap-2">
+            <button onClick={retryJob} disabled={retrying} className="btn-secondary flex items-center gap-2 text-sm">
               {retrying
                 ? <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Starter…</>
-                : <><RotateCcw className="w-4 h-4" /> Prøv igen</>}
+                : <><RotateCcw className="w-4 h-4" /> Prøv alle igen</>}
             </button>
           </div>
         )}

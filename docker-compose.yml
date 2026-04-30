@@ -23,6 +23,7 @@ services:
       SA_KEYS_DIR: /data/sa_keys
       PROGRESS_DIR: /data/progress
       LOG_DIR: /data/logs
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - migration_data:/data
     depends_on:

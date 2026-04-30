@@ -72,6 +72,13 @@ class StartJobRequest(BaseModel):
     services: list[str]
 
 
+class DiagnoseRequest(BaseModel):
+    log: str
+    service: str
+    source_email: str = ""
+    target_email: str = ""
+
+
 class JobProgressOut(BaseModel):
     id: int
     source_email: str

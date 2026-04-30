@@ -7,7 +7,7 @@ from ..api.auth import get_current_user
 from ..config import settings
 from ..database import get_db, SessionLocal
 from ..models import MigrationJob, JobStatus, Project, User
-from ..schemas import JobOut, StartJobRequest
+from ..schemas import JobOut, StartJobRequest, DiagnoseRequest
 from ..services.job_runner import start_job, cancel_job
 from ..migration.gmail import GmailMigrator
 from ..migration.drive import DriveMigrator
@@ -144,3 +144,57 @@ def verify_job(
 
     overall_ok = all(r.get("status") == "ok" for r in results if "error" not in r)
     return {"ok": overall_ok, "results": results}
+
+
+@router.post("/api/diagnose")
+def diagnose_error(
+    req: DiagnoseRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Use Claude Haiku to explain a migration error in plain Danish."""
+    import json
+    import os
+    import anthropic
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="AI-analyse ikke konfigureret (mangler ANTHROPIC_API_KEY)")
+
+    client = anthropic.Anthropic(api_key=api_key)
+
+    service_labels = {"gmail": "Gmail", "drive": "Drive", "calendar": "Kalender", "contacts": "Kontakter"}
+    service_name = service_labels.get(req.service, req.service)
+
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=512,
+        system=(
+            "Du er en hjælpsom support-assistent for Google Workspace migreringer. "
+            "Analyser fejlen fra migreringen og forklar det på enkel dansk uden teknisk jargon. "
+            "Svar KUN med gyldig JSON i dette format:\n"
+            '{"title": "...", "explanation": "...", "fix": "..."}\n'
+            "- title: maks 8 ord der beskriver hvad gik galt\n"
+            "- explanation: 2-3 sætninger der forklarer årsagen til ikke-teknikere\n"
+            "- fix: konkret vejledning til hvad brugeren skal gøre nu"
+        ),
+        messages=[{
+            "role": "user",
+            "content": (
+                f"Service: {service_name}\n"
+                f"Kilde-bruger: {req.source_email}\n"
+                f"Mål-bruger: {req.target_email}\n\n"
+                f"Fejllog:\n{req.log[-2000:]}"
+            ),
+        }],
+    )
+
+    try:
+        result = json.loads(message.content[0].text)
+    except Exception:
+        result = {
+            "title": "Fejl ved analyse",
+            "explanation": message.content[0].text,
+            "fix": "Se fejlloggen for detaljer.",
+        }
+
+    return result

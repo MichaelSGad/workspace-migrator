@@ -26,6 +26,8 @@ export default function ProjectDetail() {
   const [starting, setStarting] = useState(false)
   const [selectedServices, setSelectedServices] = useState(['gmail', 'drive', 'calendar', 'contacts'])
   const [showServicePicker, setShowServicePicker] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     Promise.all([api.getProject(id), api.getJobs(id)])
@@ -33,6 +35,18 @@ export default function ProjectDetail() {
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [id])
+
+  async function deleteProject() {
+    setDeleting(true)
+    try {
+      await api.deleteProject(id)
+      navigate('/')
+    } catch (err) {
+      alert(err.message)
+      setDeleting(false)
+      setConfirmDelete(false)
+    }
+  }
 
   async function startNewJob() {
     setStarting(true)
@@ -77,9 +91,26 @@ export default function ProjectDetail() {
                 <span className="text-emerald-300 bg-emerald-500/10 px-2.5 py-1 rounded">{project.target_domain}</span>
               </div>
             </div>
-            <button onClick={() => setShowServicePicker(true)} className="btn-primary flex items-center gap-2">
-              <Play className="w-4 h-4" /> Start migration
-            </button>
+            <div className="flex items-center gap-2">
+              {confirmDelete ? (
+                <>
+                  <span className="text-xs text-red-400 mr-1">Slet projekt og al data?</span>
+                  <button onClick={() => setConfirmDelete(false)} className="btn-secondary text-sm">Annuller</button>
+                  <button onClick={deleteProject} disabled={deleting}
+                    className="btn-danger text-sm flex items-center gap-1.5">
+                    {deleting ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    Bekræft sletning
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setConfirmDelete(true)} className="btn-ghost text-red-400 hover:text-red-300 text-sm flex items-center gap-1.5">
+                  <Trash2 className="w-4 h-4" /> Slet
+                </button>
+              )}
+              <button onClick={() => setShowServicePicker(true)} className="btn-primary flex items-center gap-2">
+                <Play className="w-4 h-4" /> Start migration
+              </button>
+            </div>
           </div>
         </div>
 
