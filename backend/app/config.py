@@ -10,6 +10,18 @@ class Settings(BaseSettings):
     progress_dir: str = "/data/progress"
     log_dir: str = "/data/logs"
 
+    # Email notifications (optional — leave blank to disable)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_tls: bool = True
+    app_url: str = "http://localhost"
+
+    # Concurrency
+    max_concurrent_jobs: int = 3
+
     class Config:
         env_file = ".env"
 

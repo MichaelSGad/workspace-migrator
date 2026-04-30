@@ -135,16 +135,27 @@ def _check_job_done(db_factory, job_id: str):
         all_progress = job.progress
         statuses = {p.status for p in all_progress}
         if statuses <= {ServiceStatus.done, ServiceStatus.failed}:
-            job.status = (
+            final_status = (
                 JobStatus.failed
                 if all(p.status == ServiceStatus.failed for p in all_progress)
                 else JobStatus.done
             )
+            job.status = final_status
             job.finished_at = datetime.utcnow()
             db.commit()
-            # Clean up stop event once job is complete
             with _stop_events_lock:
                 _stop_events.pop(job_id, None)
+            # Send email notification (non-blocking, errors swallowed)
+            try:
+                from .email import send_job_notification
+                send_job_notification(
+                    to_email=job.project.owner.email,
+                    job_status=final_status.value,
+                    project_name=job.project.name,
+                    job_id=job_id,
+                )
+            except Exception:
+                pass
     finally:
         db.close()
 

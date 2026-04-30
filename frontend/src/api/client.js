@@ -59,6 +59,10 @@ export const api = {
   verifyJob: (id) => request('POST', `/api/jobs/${id}/verify`),
   diagnoseLog: (body) => request('POST', '/api/diagnose', body),
 
+  getAdminUsers: () => request('GET', '/api/admin/users'),
+  createAdminUser: (email, password) => request('POST', '/api/admin/users', { email, password }),
+  deleteAdminUser: (id) => request('DELETE', `/api/admin/users/${id}`),
+
   streamJob: (id) => {
     const token = getToken()
     return new EventSource(`${BASE}/api/jobs/${id}/stream?token=${token}`)

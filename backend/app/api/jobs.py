@@ -45,6 +45,13 @@ def create_job(
     if not services:
         raise HTTPException(status_code=400, detail="Ingen gyldige services valgt")
 
+    running = db.query(MigrationJob).filter(MigrationJob.status == JobStatus.running).count()
+    if running >= settings.max_concurrent_jobs:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Serveren kører allerede {running} job(s). Vent til et job er færdigt og prøv igen."
+        )
+
     job = start_job(db, _db_factory, project, services)
     return job
 

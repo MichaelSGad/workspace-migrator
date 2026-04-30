@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .api import auth, projects, jobs, events
+from .api import auth, projects, jobs, events, admin
 from .database import create_tables, SessionLocal
 
 app = FastAPI(title="Workspace Migrator")
@@ -21,6 +21,7 @@ app.include_router(auth.router)
 app.include_router(projects.router)
 app.include_router(jobs.router)
 app.include_router(events.router)
+app.include_router(admin.router)
 
 
 @app.on_event("startup")

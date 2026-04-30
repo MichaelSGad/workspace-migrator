@@ -79,6 +79,11 @@ class DiagnoseRequest(BaseModel):
     target_email: str = ""
 
 
+class CreateUserRequest(BaseModel):
+    email: str
+    password: str
+
+
 class JobProgressOut(BaseModel):
     id: int
     source_email: str

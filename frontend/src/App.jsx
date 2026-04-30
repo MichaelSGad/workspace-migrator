@@ -6,6 +6,8 @@ import Dashboard from './pages/Dashboard'
 import NewProject from './pages/NewProject'
 import ProjectDetail from './pages/ProjectDetail'
 import JobProgress from './pages/JobProgress'
+import AdminUsers from './pages/AdminUsers'
+import SetupGuide from './pages/SetupGuide'
 
 function RequireAuth({ children }) {
   const token = getToken()
@@ -23,6 +25,8 @@ export default function App() {
         <Route path="/projects/new" element={<RequireAuth><NewProject /></RequireAuth>} />
         <Route path="/projects/:id" element={<RequireAuth><ProjectDetail /></RequireAuth>} />
         <Route path="/jobs/:id" element={<RequireAuth><JobProgress /></RequireAuth>} />
+        <Route path="/admin/users" element={<RequireAuth><AdminUsers /></RequireAuth>} />
+        <Route path="/guide" element={<RequireAuth><SetupGuide /></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, clearToken } from '../api/client'
-import { Layers, Plus, ArrowRight, Users, LogOut, MoveRight, Database, Inbox, Loader } from 'lucide-react'
+import { Layers, Plus, ArrowRight, Users, LogOut, MoveRight, Database, Loader, BookOpen, Shield } from 'lucide-react'
 
 function StatusBadge({ jobs }) {
   if (!jobs || jobs.length === 0) return <span className="badge-pending">Ingen jobs</span>
@@ -46,8 +46,16 @@ export default function Dashboard() {
             </div>
             <span className="font-display text-lg font-bold text-white">Workspace Migrator</span>
           </div>
-          <div className="flex items-center gap-4">
-            {user && <span className="text-sm text-slate-400 font-mono">{user.email}</span>}
+          <div className="flex items-center gap-2">
+            <button onClick={() => navigate('/guide')} className="btn-ghost flex items-center gap-2 text-sm text-slate-400">
+              <BookOpen className="w-4 h-4" /> Guide
+            </button>
+            {user?.is_admin && (
+              <button onClick={() => navigate('/admin/users')} className="btn-ghost flex items-center gap-2 text-sm text-slate-400">
+                <Shield className="w-4 h-4" /> Brugere
+              </button>
+            )}
+            {user && <span className="text-sm text-slate-500 font-mono hidden md:block">{user.email}</span>}
             <button onClick={logout} className="btn-ghost flex items-center gap-2 text-sm">
               <LogOut className="w-4 h-4" />
               Log ud

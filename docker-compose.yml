@@ -24,6 +24,12 @@ services:
       PROGRESS_DIR: /data/progress
       LOG_DIR: /data/logs
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      APP_URL: ${APP_URL:-http://187.77.89.243}
     volumes:
       - migration_data:/data
     depends_on:
